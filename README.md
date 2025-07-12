@@ -1,3 +1,10 @@
+# commander
+dism /Get-WimInfo /WimFile:G:\sources\install.wim
+
+# Error-involve
+takeown /f C:\windows\system32\drivers\portcls.sys
+icacls C:\windows\system32\drivers\portcls.sys /grant administrators:F
+
 # Easy-GPU-PV
 A work-in-progress project dedicated to making GPU Paravirtualization on Windows Hyper-V easier!  
 

@@ -1,21 +1,21 @@
 ﻿$params = @{
-    VMName = "GPUPV"
-    SourcePath = "C:\Users\james\Downloads\Win11_English_x64.iso"
-    Edition    = 6
+    VMName = "Win11GPUPV"
+    SourcePath = "D:\.tmp\Downloads\zh-cn_windows_11_business_editions_version_24h2_updated_may_2025_x64_dvd_b388d91e.iso"
+    Edition    = 5
     VhdFormat  = "VHDX"
     DiskLayout = "UEFI"
-    SizeBytes  = 40GB
-    MemoryAmount = 8GB
-    CPUCores = 4
+    SizeBytes  = 120GB
+    MemoryAmount = 4GB
+    CPUCores = 8
     NetworkSwitch = "Default Switch"
-    VHDPath = "C:\Users\Public\Documents\Hyper-V\Virtual Hard Disks\"
+    VHDPath = "D:\.dev_win11\Hyper-V\Win11GPUPV\VirtualHardDisks\"
     UnattendPath = "$PSScriptRoot"+"\autounattend.xml"
     GPUName = "AUTO"
-    GPUResourceAllocationPercentage = 50
+    GPUResourceAllocationPercentage = 30
     Team_ID = ""
     Key = ""
-    Username = "GPUVM"
-    Password = "CoolestPassword!"
+    Username = "dpca"
+    Password = "12345678"
     Autologon = "true"
 }
 
