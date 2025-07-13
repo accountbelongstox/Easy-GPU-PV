@@ -36,7 +36,7 @@ if ($LASTEXITCODE -eq 0) {
     # Push with confirmation
     Write-Host ""
     Write-Host "Ready to push to remote repository..." -ForegroundColor Cyan
-    Write-Host "Press 'Y' within 5 seconds to force push, or any other key to cancel" -ForegroundColor Yellow
+    Write-Host "Press 'Y' within 5 seconds to force push, or any other key for normal push" -ForegroundColor Yellow
     
     # 5-second timeout for user input
     $timeout = 5
@@ -56,8 +56,8 @@ if ($LASTEXITCODE -eq 0) {
     $timer.Stop()
     
     if (-not $keyPressed) {
-        Write-Host "No input received within 5 seconds, defaulting to force push..." -ForegroundColor Yellow
-        $choice = "Y"
+        Write-Host "No input received within 5 seconds, defaulting to normal push..." -ForegroundColor Yellow
+        $choice = "N"
     }
     
     if ($choice -eq "Y") {
@@ -65,11 +65,28 @@ if ($LASTEXITCODE -eq 0) {
         git push origin main --force
         
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "Successfully force pushed to remote repository!" -ForegroundColor Green
+        } else {
+            Write-Host "Failed to force push to remote repository" -ForegroundColor Red
+            Write-Host "Trying to force push to master branch..." -ForegroundColor Yellow
+            git push origin master --force
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Successfully force pushed to master branch!" -ForegroundColor Green
+            } else {
+                Write-Host "Failed to force push to both main and master branches" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "Normal pushing to remote repository..." -ForegroundColor Yellow
+        git push origin main
+        
+        if ($LASTEXITCODE -eq 0) {
             Write-Host "Successfully pushed to remote repository!" -ForegroundColor Green
         } else {
             Write-Host "Failed to push to remote repository" -ForegroundColor Red
             Write-Host "Trying to push to master branch..." -ForegroundColor Yellow
-            git push origin master --force
+            git push origin master
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "Successfully pushed to master branch!" -ForegroundColor Green
@@ -77,8 +94,6 @@ if ($LASTEXITCODE -eq 0) {
                 Write-Host "Failed to push to both main and master branches" -ForegroundColor Red
             }
         }
-    } else {
-        Write-Host "Push cancelled by user" -ForegroundColor Yellow
     }
 } else {
     Write-Host "Commit failed - nothing to commit or error occurred" -ForegroundColor Red

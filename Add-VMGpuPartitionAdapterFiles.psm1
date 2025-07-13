@@ -1,4 +1,24 @@
-﻿Function Add-VMGpuPartitionAdapterFiles {
+﻿# Function to take ownership and grant permissions to files
+Function Grant-FilePermissions {
+    param(
+        [string]$FilePath,
+        [string]$CurrentUser
+    )
+    
+    Write-Host "INFO: Taking ownership and granting permissions for: $(Split-Path $FilePath -Leaf)" -ForegroundColor Yellow
+    
+    # Take ownership of file
+    $takeownCommand = "takeown.exe /f `"$FilePath`""
+    Write-Host "EXECUTING: $takeownCommand" -ForegroundColor Cyan
+    & takeown.exe /f "`"$FilePath`""
+    
+    # Grant full permissions to current user
+    $icaclsCommand = "icacls.exe `"$FilePath`" /grant `"$CurrentUser`:F`""
+    Write-Host "EXECUTING: $icaclsCommand" -ForegroundColor Cyan
+    & icacls.exe "`"$FilePath`"" /grant "`"$CurrentUser`:F`""
+}
+
+Function Add-VMGpuPartitionAdapterFiles {
     param(
     [string]$hostname = $ENV:COMPUTERNAME,
     [string]$DriveLetter,
@@ -7,6 +27,12 @@
     
     # Initialize array to track failed file copies
     $FailedFiles = @()
+    
+    # Get current user in DOMAIN\USERNAME format using whoami
+    $whoamiCommand = "whoami"
+    Write-Host "EXECUTING: $whoamiCommand" -ForegroundColor Cyan
+    $currentUser = & whoami
+    Write-Host "Current user: $currentUser" -ForegroundColor Green
     
     If (!($DriveLetter -like "*:*")) {
         $DriveLetter = $Driveletter + ":"
@@ -85,29 +111,38 @@
                         try {
                             # Second attempt: Use robocopy for system files that may be locked
                             $robocopySource = Split-Path $path2 -Parent
-                            $robocopyResult = Start-Process -FilePath "robocopy.exe" -ArgumentList "`"$robocopySource`" `"$Destination`" `"$FileName`" /R:3 /W:1 /NFL /NDL /NJH /NJS" -Wait -PassThru -WindowStyle Hidden
+                            $robocopyCommand = "robocopy.exe `"$robocopySource`" `"$Destination`" `"$FileName`" /R:3 /W:1 /NFL /NDL /NJH /NJS"
+                            Write-Host "EXECUTING: $robocopyCommand" -ForegroundColor Cyan
+                            $robocopyResult = & robocopy.exe "`"$robocopySource`"" "`"$Destination`"" "`"$FileName`"" /R:3 /W:1 /NFL /NDL /NJH /NJS
+                            $robocopyExitCode = $LASTEXITCODE
                             
-                            if ($robocopyResult.ExitCode -le 1) {
+                            if ($robocopyExitCode -le 1) {
                                 Write-Host "SUCCESS: Used robocopy to copy $FileName"
                             } else {
-                                $exitCode = $robocopyResult.ExitCode
-                                Write-Host "WARNING: Robocopy failed for $FileName (Exit Code: $exitCode)"
+                                Write-Host "WARNING: Robocopy failed for $FileName (Exit Code: $robocopyExitCode)"
                                 # Third attempt: Try to take ownership and copy using icacls method
                                 try {
                                     Write-Host "INFO: Attempting to take ownership of $FileName..."
-                                    # Take ownership of source file
-                                    $takeownResult = Start-Process -FilePath "takeown.exe" -ArgumentList "/f `"$path2`"" -Wait -PassThru -WindowStyle Hidden
-                                    # Grant full permissions to current user
-                                    $currentUser = $env:USERNAME
-                                    $icaclsResult = Start-Process -FilePath "icacls.exe" -ArgumentList "`"$path2`" /grant `"$currentUser`:F`"" -Wait -PassThru -WindowStyle Hidden
-                                    # Use copy command instead of Copy-Item for better compatibility
-                                    $copyResult = Start-Process -FilePath "cmd.exe" -ArgumentList "/c copy `"$path2`" `"$DestinationFile`"" -Wait -PassThru -WindowStyle Hidden
                                     
-                                    if ($copyResult.ExitCode -eq 0) {
-                                        Write-Host "SUCCESS: Copied $FileName after taking ownership using copy command"
-                                    } else {
-                                        throw "Copy command failed with exit code: $($copyResult.ExitCode)"
+                                    # Grant permissions to source file
+                                    Grant-FilePermissions -FilePath $path2 -CurrentUser $currentUser
+                                    
+                                    
+                                    # Ensure destination directory exists
+                                    $destDir = Split-Path $DestinationFile -Parent
+                                    if (!(Test-Path $destDir)) {
+                                        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
                                     }
+                                    
+                                    # Grant permissions to destination file BEFORE copying
+                                    Grant-FilePermissions -FilePath $DestinationFile -CurrentUser $currentUser
+                                    
+                                    # Use PowerShell Copy-Item after successful permission elevation
+                                    $copyCommand = "Copy-Item `"$path2`" -Destination `"$DestinationFile`" -Force"
+                                    Write-Host "EXECUTING: $copyCommand" -ForegroundColor Cyan
+                                    Copy-Item $path2 -Destination $DestinationFile -Force -ErrorAction Stop
+                                    
+                                    Write-Host "SUCCESS: Copied $FileName after taking ownership using PowerShell Copy-Item"
                                 }
                                 catch {
                                     $errorMessage = $_.Exception.Message
@@ -153,22 +188,24 @@
         Write-Host "SUMMARY: $($FailedFiles.Count) files failed to copy automatically" -ForegroundColor Yellow
         Write-Host "============================================" -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "Failed files that need manual copying:" -ForegroundColor Red
+        Write-Host "Failed files that need manual copying (cmd commands):" -ForegroundColor Red
         foreach ($file in $FailedFiles) {
-            Write-Host "  $($file.FileName): $($file.SourcePath) -> $($file.DestinationPath)" -ForegroundColor White
+            Write-Host "  copy `"$($file.SourcePath)`" `"$($file.DestinationPath)`"" -ForegroundColor White
         }
         Write-Host ""
-        Write-Host "Waiting 1 minute before opening file explorer..." -ForegroundColor Cyan
-        Start-Sleep -Seconds 60
         
-        # Open explorer to the source drivers folder and destination folder
+        # Open explorer to the source drivers folder and destination folder immediately
         $sourceFolder = Split-Path $FailedFiles[0].SourcePath -Parent
         $destFolder = Split-Path $FailedFiles[0].DestinationPath -Parent
         Write-Host "Opening source folder: $sourceFolder" -ForegroundColor Green
-        Start-Process "explorer.exe" -ArgumentList $sourceFolder
+        $explorerCommand1 = "explorer.exe $sourceFolder"
+        Write-Host "EXECUTING: $explorerCommand1" -ForegroundColor Cyan
+        & explorer.exe $sourceFolder
         Start-Sleep -Seconds 2
         Write-Host "Opening destination folder: $destFolder" -ForegroundColor Green
-        Start-Process "explorer.exe" -ArgumentList $destFolder
+        $explorerCommand2 = "explorer.exe $destFolder"
+        Write-Host "EXECUTING: $explorerCommand2" -ForegroundColor Cyan
+        & explorer.exe $destFolder
         
         Write-Host ""
         Write-Host "Please manually copy the failed files from source to destination folders." -ForegroundColor Yellow
