@@ -92,13 +92,22 @@
                             } else {
                                 $exitCode = $robocopyResult.ExitCode
                                 Write-Host "WARNING: Robocopy failed for $FileName (Exit Code: $exitCode)"
-                                # Third attempt: Try to take ownership and copy
+                                # Third attempt: Try to take ownership and copy using icacls method
                                 try {
                                     Write-Host "INFO: Attempting to take ownership of $FileName..."
+                                    # Take ownership of source file
                                     $takeownResult = Start-Process -FilePath "takeown.exe" -ArgumentList "/f `"$path2`"" -Wait -PassThru -WindowStyle Hidden
-                                    Start-Process -FilePath "icacls.exe" -ArgumentList "`"$path2`" /grant administrators:F" -Wait -WindowStyle Hidden
-                                    Copy-Item $path2 -Destination $Destination -Force -ErrorAction Stop
-                                    Write-Host "SUCCESS: Copied $FileName after taking ownership"
+                                    # Grant full permissions to current user
+                                    $currentUser = $env:USERNAME
+                                    $icaclsResult = Start-Process -FilePath "icacls.exe" -ArgumentList "`"$path2`" /grant `"$currentUser`:F`"" -Wait -PassThru -WindowStyle Hidden
+                                    # Use copy command instead of Copy-Item for better compatibility
+                                    $copyResult = Start-Process -FilePath "cmd.exe" -ArgumentList "/c copy `"$path2`" `"$DestinationFile`"" -Wait -PassThru -WindowStyle Hidden
+                                    
+                                    if ($copyResult.ExitCode -eq 0) {
+                                        Write-Host "SUCCESS: Copied $FileName after taking ownership using copy command"
+                                    } else {
+                                        throw "Copy command failed with exit code: $($copyResult.ExitCode)"
+                                    }
                                 }
                                 catch {
                                     $errorMessage = $_.Exception.Message
